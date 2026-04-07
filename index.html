@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BirdWeather Explorer — Netherlands</title>
+    <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <!-- Intro modal -->
+    <div id="intro-overlay" class="intro-overlay">
+        <div class="intro-modal">
+            <h1>BirdWeather Explorer</h1>
+            <p class="intro-subtitle">Netherlands</p>
+
+            <section class="intro-section">
+                <h2>What is this?</h2>
+                <p>An interactive dashboard exploring bird acoustic detection data across the Netherlands. Browse activity rhythms, seasonal patterns, weather correlations, migration maps, behavioral clustering, and more for <strong>116 bird species</strong>.</p>
+            </section>
+
+            <section class="intro-section">
+                <h2>Data source</h2>
+                <p>All detections come from the <a href="https://www.birdweather.com" target="_blank" rel="noopener">BirdWeather</a> network — a global community of citizen-science stations running <a href="https://www.birdweather.com/birdnetpi" target="_blank" rel="noopener">BirdNET-Pi</a> devices that record and classify bird sounds 24/7.</p>
+                <div class="intro-stats">
+                    <div class="intro-stat"><span class="intro-stat-val">36M+</span><span class="intro-stat-label">detections</span></div>
+                    <div class="intro-stat"><span class="intro-stat-val">851</span><span class="intro-stat-label">stations</span></div>
+                    <div class="intro-stat"><span class="intro-stat-val">116</span><span class="intro-stat-label">species</span></div>
+                    <div class="intro-stat"><span class="intro-stat-val">360</span><span class="intro-stat-label">days</span></div>
+                </div>
+            </section>
+
+            <section class="intro-section">
+                <h2>Coverage</h2>
+                <p><strong>Time period:</strong> March 2025 &ndash; March 2026 (one full year).</p>
+                <p><strong>Spatial extent:</strong> The Netherlands only (bounding box ~50.7&ndash;53.6&deg;N, 3.3&ndash;7.2&deg;E).</p>
+                <p><strong>Species:</strong> 116 species with sufficient detection counts. Rare vagrants and species with very few detections are excluded.</p>
+            </section>
+
+            <section class="intro-section">
+                <h2>How to use</h2>
+                <p><strong>Species Explorer</strong> — Select a species from the left panel and navigate the tabs: activity rhythm (relative to sunrise), daily counts, hour&times;date heatmaps, ML-derived insights, weather correlations, station maps, migration animation, and false-positive co-occurrence analysis.</p>
+                <p><strong>Overview</strong> — Cross-species views: behavioral clustering (UMAP/PCA of activity profiles) and species prediction (available in the full version only).</p>
+            </section>
+
+            <section class="intro-section intro-disclaimer">
+                <h2>Disclaimer</h2>
+                <p>Detections are produced by <strong>BirdNET</strong>, a deep learning model for bird sound identification. While highly capable, acoustic ML classification is not perfect — expect some false positives and missed detections, particularly for rare species, nocturnal calls, or noisy environments. The "FP Analysis" tab explores co-occurrence patterns that may indicate systematic misidentifications. This data should not be treated as verified ornithological records.</p>
+            </section>
+
+            <section class="intro-section intro-credits">
+                <h2>Acknowledgments</h2>
+                <ul>
+                    <li><a href="https://www.birdweather.com" target="_blank" rel="noopener">BirdWeather</a> — the platform and API powering the global detection network</li>
+                    <li><a href="https://www.birdweather.com/birdnetpi" target="_blank" rel="noopener">BirdNET-Pi</a> by <strong>Patrick McGuire</strong> — the Raspberry Pi-based recording station that makes citizen-science acoustic monitoring accessible</li>
+                    <li><a href="https://birdnet.cornell.edu" target="_blank" rel="noopener">BirdNET</a> by the <strong>K. Lisa Yang Center for Conservation Bioacoustics</strong> at the <strong>Cornell Lab of Ornithology</strong> and <strong>Chemnitz University of Technology</strong> — the bird sound identification model (created by Stefan Kahl et al.)</li>
+                    <li>All the citizen scientists running BirdNET-Pi stations across the Netherlands</li>
+                </ul>
+            </section>
+
+            <button class="intro-enter-btn" onclick="closeIntro()">Explore the data</button>
+        </div>
+    </div>
+
+    <header>
+        <h1>BirdWeather Explorer — Netherlands</h1>
+        <nav id="mode-nav">
+            <button class="mode-btn active" data-mode="overview" onclick="switchMode('overview')">Overview</button>
+            <button class="mode-btn" data-mode="explorer" onclick="switchMode('explorer')">Species Explorer</button>
+        </nav>
+        <div id="lang-toggle">
+            <button class="lang-btn active" data-lang="en" onclick="setLang('en')">Birds</button>
+            <button class="lang-btn" data-lang="nl" onclick="setLang('nl')">Vogels</button>
+            <button class="lang-btn" data-lang="fr" onclick="setLang('fr')">Oiseaux</button>
+            <button class="lang-btn" data-lang="it" onclick="setLang('it')">Uccelli</button>
+            <button class="lang-btn" data-lang="la" onclick="setLang('la')">Aves</button>
+        </div>
+        <div id="status-bar">
+            <button class="about-btn" onclick="openIntro()">About</button>
+            <span id="status-text">Loading...</span>
+        </div>
+    </header>
+
+    <div id="data-summary" style="display:none">
+        <span id="summary-text"></span>
+    </div>
+
+    <main>
+        <div id="layout">
+            <!-- Left panel: species selector -->
+            <aside id="species-panel">
+                <input type="text" id="species-search" placeholder="Search species..." oninput="filterSpecies()">
+                <div id="species-list"></div>
+            </aside>
+
+            <!-- Right panel: info + charts -->
+            <section id="content-panel">
+                <!-- Species info card -->
+                <div id="species-info" style="display:none">
+                    <img id="species-img" src="" alt="">
+                    <div id="species-details">
+                        <h2 id="species-common-name"></h2>
+                        <p id="species-scientific-name"></p>
+                        <p id="species-count"></p>
+                        <p id="species-wiki-summary"></p>
+                        <a id="species-wiki-link" href="" target="_blank" rel="noopener">Read more on Wikipedia</a>
+                    </div>
+                </div>
+
+                <div id="tabs">
+                    <div id="tabs-explorer" style="display:none">
+                        <button class="tab active" data-tab="rhythm" onclick="switchTab('rhythm')">Rhythm</button>
+                        <button class="tab" data-tab="daily" onclick="switchTab('daily')">Daily</button>
+                        <button class="tab" data-tab="heatmap" onclick="switchTab('heatmap')">Heatmap</button>
+                        <button class="tab" data-tab="insights" onclick="switchTab('insights')">Insights</button>
+                        <button class="tab" data-tab="weather" onclick="switchTab('weather')">Weather</button>
+                        <button class="tab" data-tab="correlations" onclick="switchTab('correlations')">Correlations</button>
+                        <button class="tab" data-tab="map" onclick="switchTab('map')">Map</button>
+                        <button class="tab" data-tab="migration" onclick="switchTab('migration')">Migration</button>
+                        <button class="tab" data-tab="fp" onclick="switchTab('fp')">FP Analysis</button>
+                    </div>
+                    <div id="tabs-overview">
+                        <button class="tab" data-tab="ecology" onclick="switchTab('ecology')">Ecology</button>
+                        <button class="tab" data-tab="predict" onclick="switchTab('predict')">Predict</button>
+                        <button class="tab" data-tab="methodology" onclick="switchTab('methodology')">Methodology</button>
+                    </div>
+                    <div class="tab-info-wrapper">
+                        <button class="tab-info-btn" id="tab-info-btn" onmouseenter="showTabInfo()" onmouseleave="hideTabInfo()" onclick="goToMethodology()">?</button>
+                        <div class="tab-info-tooltip" id="tab-info-tooltip"></div>
+                    </div>
+                </div>
+
+                <div id="chart-container">
+                    <div id="chart"></div>
+                    <div id="methodology-container" style="display:none"></div>
+                    <div id="map-container" style="display:none"></div>
+                    <div id="migration-container" style="display:none"></div>
+                    <div id="ecology-container" style="display:none"></div>
+                    <div id="predict-container" style="display:none">
+                        <div id="predict-controls">
+                            <div id="predict-mode-toggle">
+                                <button class="predict-mode-btn active" data-mode="point" onclick="setPredictMode('point')">Top species here</button>
+                                <button class="predict-mode-btn" data-mode="density" onclick="setPredictMode('density')">Species density map</button>
+                            </div>
+                            <p id="predict-help-point">Click on the map or enter coordinates to predict which birds you might see.</p>
+                            <p id="predict-help-density" style="display:none">Select a species and time to see its probability across the Netherlands.</p>
+                            <div id="predict-inputs">
+                                <div id="predict-point-inputs">
+                                    <label>Lat: <input type="number" id="predict-lat" step="0.01" value="52.37" min="50.5" max="53.7"></label>
+                                    <label>Lon: <input type="number" id="predict-lon" step="0.01" value="4.90" min="3.3" max="7.3"></label>
+                                </div>
+                                <div id="predict-density-inputs" style="display:none">
+                                    <label>Species: <select id="predict-species-select"></select></label>
+                                </div>
+                                <label>Date/Time: <input type="datetime-local" id="predict-datetime"></label>
+                                <button id="predict-btn" onclick="runPrediction()">Predict</button>
+                            </div>
+                        </div>
+                        <div id="predict-layout">
+                            <div id="predict-map"></div>
+                            <div id="predict-results"></div>
+                        </div>
+                        <div id="density-legend" style="display:none">
+                            <span class="legend-label">0%</span>
+                            <div class="legend-gradient"></div>
+                            <span class="legend-label">100%</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script src="static/app.js"></script>
+</body>
+</html>
